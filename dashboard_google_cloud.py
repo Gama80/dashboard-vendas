@@ -6,22 +6,12 @@ import plotly.express as px
 # ==== Controle de Acesso ====
 st.set_page_config(page_title="Painel de Vendas", layout="wide")
 
-usuarios = {
-    "telas3231": "admin",
-    "vendedor123": "vendedor",
-    "gestor2025": "admin"
-}
-
-with st.container():
-    st.markdown("### 🔒 Acesso Restrito")
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        senha = st.text_input("Digite sua senha:", type="password")
-    if senha not in usuarios:
-        st.stop()
-
-nivel = usuarios[senha]
-st.success(f"Acesso liberado: {nivel.upper()}")
+# === Acesso simples com uma senha ===
+senha = st.sidebar.text_input("🔒 Digite a senha para acessar:", type="password")
+if senha != "telas3231":
+    st.warning("Acesso negado. Informe a senha correta.")
+    st.stop()
+st.success("Acesso liberado ✅")
 
 # ==== Carregar dados do Google Sheets ====
 url = "https://drive.google.com/uc?id=14oLRF6uwVLL-vsDBC2LS83YLdrnMH_w8&export=download"
