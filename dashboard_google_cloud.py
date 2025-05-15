@@ -3,6 +3,12 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+# Proteção com senha
+senha = st.sidebar.text_input("Digite a senha para acessar o painel:", type="password")
+if senha != "telas3231":
+    st.warning("Acesso restrito. Informe a senha correta.")
+    st.stop()
+
 # Carregar dados diretamente do Google Drive
 url = "https://drive.google.com/uc?id=14oLRF6uwVLL-vsDBc2LS03YLdrnMH_w8&export=download"
 df = pd.read_csv(url, encoding='latin1', sep=';')
