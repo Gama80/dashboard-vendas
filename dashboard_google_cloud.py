@@ -6,6 +6,8 @@ import plotly.express as px
 # Carregar dados diretamente do Google Drive
 url = "https://drive.google.com/uc?id=14oLRF6uwVLL-vsDBc2LS03YLdrnMH_w8&export=download"
 df = pd.read_csv(url, encoding='latin1', sep=';')
+df.columns = df.columns.str.strip()  # remove espaços em branco nos nomes
+
 
 # Pré-processamento
 df = df[df['VENDEDOR'].notna()]
