@@ -3,79 +3,89 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Proteção com senha
-senha = st.sidebar.text_input("Digite a senha para acessar o painel:", type="password")
-if senha != "telas3231":
-    st.warning("Acesso restrito. Informe a senha correta.")
-    st.stop()
+# ==== Controle de Acesso ====
+st.set_page_config(page_title="Painel de Vendas", layout="wide")
 
-# Carregar dados diretamente do Google Drive
-url = "https://drive.google.com/uc?id=14oLRF6uwVLL-vsDBc2LS03YLdrnMH_w8&export=download"
+usuarios = {
+    "telas3231": "admin",
+    "vendedor123": "vendedor",
+    "gestor2025": "admin"
+}
+
+with st.container():
+    st.markdown("### 🔒 Acesso Restrito")
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        senha = st.text_input("Digite sua senha:", type="password")
+    if senha not in usuarios:
+        st.stop()
+
+nivel = usuarios[senha]
+st.success(f"Acesso liberado: {nivel.upper()}")
+
+# ==== Carregar dados do Google Sheets ====
+url = "https://drive.google.com/uc?id=14oLRF6uwVLL-vsDBC2LS83YLdrnMH_w8&export=download"
 df = pd.read_csv(url, encoding='latin1', sep=';')
-df.columns = df.columns.str.strip()  # remove espaços em branco nos nomes
+df.columns = df.columns.str.strip()
 
-
-# Pré-processamento
+# ==== Tratamento básico ====
 df = df[df['VENDEDOR'].notna()]
 df['DATAPREVENDA'] = pd.to_datetime(df['DATAPREVENDA'], errors='coerce', dayfirst=True)
 df = df[df['DATAPREVENDA'].notna()]
 df['DATA_BR'] = df['DATAPREVENDA'].dt.strftime('%d/%m/%Y')
 
-# Conversão de valores
-df['PRECOVENDA'] = pd.to_numeric(df['PRECOVENDA'], errors='coerce')
-df['VALORFRETE'] = df['VALORFRETE'].replace({ 'R\$ ': '', ',': '.' }, regex=True)
-df['VALORFRETE'] = pd.to_numeric(df['VALORFRETE'], errors='coerce').fillna(0)
+df['PRECOVENDA'] = pd.to_numeric(df['PRECOVENDA'].astype(str).str.replace('R$','').str.replace('.', '').str.replace(',', '.'), errors='coerce')
+df['VALORFRETE'] = pd.to_numeric(df['VALORFRETE'].astype(str).str.replace('R$','').str.replace('.', '').str.replace(',', '.'), errors='coerce')
 
-# Filtros
-st.sidebar.title("Filtros")
+# ==== Filtros ====
+st.sidebar.header("Filtros")
 data_inicial = st.sidebar.date_input("Data Inicial", df['DATAPREVENDA'].min())
 data_final = st.sidebar.date_input("Data Final", df['DATAPREVENDA'].max())
-ufs = st.sidebar.multiselect("Estado (UF)", df['ENDUF1'].dropna().unique(), default=df['ENDUF1'].dropna().unique())
-tipo_pessoa = st.sidebar.multiselect("Tipo de Pessoa", df['Tipo de Pessoa'].dropna().unique(), default=df['Tipo de Pessoa'].dropna().unique())
+ufs = st.sidebar.multiselect("Estados (UF)", df['ENDUF1'].dropna().unique(), default=df['ENDUF1'].dropna().unique())
 
 df_filtrado = df[
     (df['DATAPREVENDA'] >= pd.to_datetime(data_inicial)) &
     (df['DATAPREVENDA'] <= pd.to_datetime(data_final)) &
-    (df['ENDUF1'].isin(ufs)) &
-    (df['Tipo de Pessoa'].isin(tipo_pessoa)) &
-    (~df['DSCFORMAPAG_PRINCIPAL'].str.contains("LIVRE DÉBITO", na=False))
+    (df['ENDUF1'].isin(ufs))
 ]
 
-# KPIs
-total_pedidos = df_filtrado.shape[0]
-total_faturado = df_filtrado['PRECOVENDA'].sum()
-total_frete = df_filtrado['VALORFRETE'].sum()
-clientes_unicos = df_filtrado['RAZAOSOCIAL_NOME'].nunique()
-
-st.title("Painel de Vendas (Google Sheets + Streamlit Cloud)")
+# ==== KPIs ====
+st.title("📊 Painel de Vendas (Google Sheets + Streamlit Cloud)")
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Total de Pedidos", f"{total_pedidos}")
-col2.metric("Valor Faturado", f"R$ {total_faturado:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-col3.metric("Frete Total", f"R$ {total_frete:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-col4.metric("Clientes Únicos", f"{clientes_unicos}")
+col1.metric("Total de Pedidos", f"{df_filtrado.shape[0]}")
+col2.metric("Valor Faturado", f"R$ {df_filtrado['PRECOVENDA'].sum():,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+col3.metric("Frete Total", f"R$ {df_filtrado['VALORFRETE'].sum():,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+col4.metric("Clientes Únicos", f"{df_filtrado['RAZAOSOCIAL_NOME'].nunique()}")
 
-# Faturamento por Vendedor
-st.subheader("Faturamento por Vendedor")
+# ==== Gráficos ====
+st.subheader("📈 Faturamento por Vendedor")
 vendedores = df_filtrado.groupby('VENDEDOR')['PRECOVENDA'].sum().reset_index().sort_values(by='PRECOVENDA', ascending=False)
-fig1 = px.bar(vendedores, x='VENDEDOR', y='PRECOVENDA', labels={'PRECOVENDA': 'R$'})
-st.plotly_chart(fig1)
+st.plotly_chart(px.bar(vendedores, x='VENDEDOR', y='PRECOVENDA', labels={'PRECOVENDA': 'R$'}))
 
-# Formas de Pagamento
-st.subheader("Formas de Pagamento")
-formas = df_filtrado['DSCFORMAPAG_PRINCIPAL'].value_counts().reset_index()
-formas.columns = ['Forma de Pagamento', 'Qtd']
-fig2 = px.pie(formas, names='Forma de Pagamento', values='Qtd', hole=0.4)
-st.plotly_chart(fig2)
+st.subheader("📆 Faturamento por Mês")
+df_filtrado['AnoMes'] = df_filtrado['DATAPREVENDA'].dt.to_period('M').astype(str)
+meses = df_filtrado.groupby('AnoMes')['PRECOVENDA'].sum().reset_index()
+st.plotly_chart(px.bar(meses, x='AnoMes', y='PRECOVENDA', labels={'AnoMes': 'Mês/Ano', 'PRECOVENDA': 'R$'}))
 
-# Faturamento por UF
-st.subheader("Faturamento por Estado")
-ufs = df_filtrado.groupby('ENDUF1')['PRECOVENDA'].sum().reset_index().sort_values(by='PRECOVENDA', ascending=False)
-fig3 = px.bar(ufs, x='ENDUF1', y='PRECOVENDA', labels={'PRECOVENDA': 'R$'})
-st.plotly_chart(fig3)
+st.subheader("📊 Tendência de Faturamento")
+tendencia = df_filtrado.groupby('DATAPREVENDA')['PRECOVENDA'].sum().reset_index()
+st.plotly_chart(px.line(tendencia, x='DATAPREVENDA', y='PRECOVENDA', markers=True))
 
-# Ranking de Clientes
-st.subheader("Top 10 Clientes")
+st.subheader("🗺️ Faturamento por Estado (Mapa)")
+uf_data = df_filtrado.groupby('ENDUF1')['PRECOVENDA'].sum().reset_index()
+fig_uf = px.choropleth(uf_data, locations='ENDUF1', locationmode='USA-states',
+                       color='PRECOVENDA', scope='south america', title='Faturamento por Estado')
+st.plotly_chart(fig_uf)
+
+# ==== Exportação de dados ====
+if nivel == "admin":
+    st.subheader("📤 Exportar Dados Filtrados")
+    csv = df_filtrado.to_csv(index=False).encode('utf-8-sig')
+    st.download_button("⬇️ Baixar CSV", csv, "dados_filtrados.csv", "text/csv")
+
+# ==== Tabela final ====
+st.subheader("📋 Top 10 Clientes")
 clientes = df_filtrado.groupby('RAZAOSOCIAL_NOME').agg({
     'PRECOVENDA': 'sum',
     'VALORFRETE': 'sum',
